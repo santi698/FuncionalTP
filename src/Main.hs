@@ -9,16 +9,20 @@ x -: f = f x
 
 main = do
   hSetBuffering stdout NoBuffering -- for online haskell runner
-  controller <- NetworkController.start
+  controller <- NetworkController.start 4242
+  NetworkController.broadcast controller "Waiting for players to connect"
+  NetworkController.waitForPlayers controller
+  NetworkController.broadcast controller "All players ready"
   gameLoop (newGame [] []) controller
 
 gameLoop :: GameState -> NetworkController.NetworkController -> IO ()
 gameLoop state controller = do
   NetworkController.broadcast controller $ show state
+  NetworkController.broadcast controller $ "It's " ++ (show $ currentTurn state) ++ " turn."
   action <- getAction controller $ currentTurn state
   case action of
     Nothing -> do
-      print "Invalid action"
+      NetworkController.send controller NetworkController.Player1 "Invalid action"
       gameLoop state controller
     Just action -> gameLoop (state -: runAction action) controller
 
