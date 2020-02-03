@@ -12,7 +12,7 @@ import           Data.Maybe        (Maybe, isNothing)
 data Board a = Board (Array Int (Maybe a))
     deriving Eq
 
-showBoardElem :: Maybe a -> String
+showBoardElem :: (Show a) => Maybe a -> String
 showBoardElem (Just e) = show e
 showBoardElem Nothing  = "_"
 

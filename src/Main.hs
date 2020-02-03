@@ -4,7 +4,7 @@ import           Data.Maybe        (Maybe (Just, Nothing))
 import qualified ExampleDecks
 import           Game              (Deck (Deck), GameState (currentTurn),
                                     Player (Player1, Player2),
-                                    PlayerAction (EndTurn), PlayerState (hand),
+                                    PlayerAction (..), PlayerState (hand),
                                     newGame, playerState, render, runAction)
 import qualified NetworkController as NetworkController
 import           System.IO         (BufferMode (NoBuffering), getLine,
@@ -19,7 +19,7 @@ main = do
   NetworkController.broadcast controller "Waiting for players to connect"
   NetworkController.waitForPlayers controller
   NetworkController.broadcast controller "All players ready"
-  gameState <- newGame ExampleDecks.exampleDeck1 ExampleDecks.exampleDeck2
+  gameState <- newGame ExampleDecks.exampleDeck2 ExampleDecks.exampleDeck1
   gameLoop gameState controller
 
 gameLoop :: GameState -> NetworkController.NetworkController -> IO ()
@@ -42,8 +42,7 @@ getAction controller Player1 playerState = do
     controller
     NetworkController.Player1
     $
-    "Your hand is" ++
-      (show $ hand playerState)
+    "Your hand is " ++ (show $ hand playerState)
   NetworkController.send
     controller
     NetworkController.Player1
@@ -65,5 +64,6 @@ getAction controller Player2 playerState = do
   return $ userInputToAction $ words input
 
 userInputToAction :: [String] -> Maybe PlayerAction
-userInputToAction ["EndTurn"] = Just EndTurn
-userInputToAction _           = Nothing
+userInputToAction ["EndTurn"]  = Just EndTurn
+userInputToAction ["DrawCard"] = Just DrawCard
+userInputToAction _            = Nothing

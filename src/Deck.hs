@@ -1,6 +1,7 @@
 module Deck
   ( Deck(Deck)
   , draw
+  , drawN
   , shuffle
   )
 where
@@ -14,6 +15,9 @@ data Deck = Deck [Card]
 
 draw :: Deck -> (Card, Deck)
 draw (Deck (x : xs)) = (x, (Deck xs))
+
+drawN :: Deck -> Int -> ([Card], Deck)
+drawN (Deck cards) n = (drawnCards, Deck $ newCards) where (drawnCards, newCards) = splitAt n cards
 
 shuffle :: Deck -> IO Deck
 shuffle (Deck xs) = do

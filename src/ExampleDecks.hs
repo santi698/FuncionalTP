@@ -29,4 +29,5 @@ exampleDeck2 = Deck
   , commonBat
   , explosiveGoblin
   , explosiveGoblin
+  , boostMorale
   ]
