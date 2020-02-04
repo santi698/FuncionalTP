@@ -10,11 +10,14 @@ module Game
   , Player(..)
   , Deck(..)
   , render
+  , AttackSource(..)
+  , AttackTarget(..)
   )
 where
 
-import           Board             (Board, newBoard, (!?))
-import           Card              (Card, MagicCard, MonsterCard (attack))
+import           Board             (Board, newBoard, play, (!?))
+import           Card              (Card (Magic, Monster), MagicCard (..),
+                                    MonsterCard (..))
 import           Data.Array.IArray
 import           Data.List
 import           Data.Maybe
@@ -32,7 +35,12 @@ class (Render a) where
 
 instance Render GameState where
   render (GameState (player1State, player2State) currentTurn) =
-    (render $ board player1State)
+    "Player 1 HP: "
+      ++ (show $ playerHp player1State)
+      ++ "\nPlayer 2 HP: "
+      ++ (show $ playerHp player2State)
+      ++ "\n"
+      ++ (render $ board player1State)
       ++ "\n"
       ++ (render $ board player2State)
       ++ "\n"
@@ -59,23 +67,25 @@ nextPlayer Player1 = Player2
 nextPlayer Player2 = Player1
 
 data PlayerState = PlayerState
-    { hand  :: Hand
-    , deck  :: Deck
-    , board :: Board MonsterCard
-    , hp    :: Int
+    { hand     :: Hand
+    , deck     :: Deck
+    , board    :: Board MonsterCard
+    , playerHp :: Int
     }
     deriving (Show, Eq)
 
 type Hand = [Card]
+playCard :: Hand -> Int -> (Card, Hand)
+playCard xs i = let (start, end) = splitAt i xs in (head end, start ++ drop 1 end)
 type CanAttack = Bool
 type MonsterSlot = Maybe MonsterCard
 type MonsterSlots = [MonsterSlot]
 type MonsterSlotIndex = Int
 data AttackSource = SourceMonster MonsterSlotIndex
-    deriving (Show, Eq)
+    deriving (Show, Eq, Read)
 data AttackTarget = TargetMonster MonsterSlotIndex
     | EnemyHero
-    deriving (Show, Eq)
+    deriving (Show, Eq, Read)
 
 doAttack :: AttackSource -> AttackTarget -> GameState -> GameState
 doAttack (SourceMonster idx) EnemyHero (GameState (player1State, player2State) Player1)
@@ -126,16 +136,29 @@ drawCard (GameState (player1State, player2State) Player2) =
   where (drawnCard, newDeck) = draw $ deck player1State
         newHand = drawnCard:(hand player1State)
 
+playCardFromHand i (GameState (player1State, player2State) Player1) =
+  let (card, newHand) = playCard (hand player1State) i
+  in case card of
+    (Monster monster) -> GameState (player1State { hand = newHand, board = play monster $ board player1State }, player2State) Player1
+    otherwise -> error "Only monsters can be played"
+
+playCardFromHand i (GameState (player1State, player2State) Player2) =
+  let (card, newHand) = playCard (hand player2State) i
+  in case card of
+    (Monster monster) -> GameState (player1State, player2State { hand = newHand, board = play monster $ board player1State }) Player1
+    otherwise -> error "Only monsters can be played"
+
 data PlayerAction = Attack AttackSource AttackTarget
     | PlayCardFromHand Int
     | EndTurn
     | DrawCard
-    deriving (Show, Eq)
+    deriving (Show, Eq, Read)
 
 runAction :: PlayerAction -> GameState -> GameState
-runAction (Attack src tgt) gameState = doAttack src tgt gameState
-runAction (EndTurn       ) gameState = drawCard $ endTurn gameState
-runAction (DrawCard) gameState       = drawCard gameState
+runAction (Attack src tgt) gameState     = doAttack src tgt gameState
+runAction (EndTurn       ) gameState     = drawCard $ endTurn gameState
+runAction (DrawCard) gameState           = drawCard gameState
+runAction (PlayCardFromHand i) gameState = playCardFromHand i gameState
 
 newGame :: Deck -> Deck -> IO GameState
 newGame player1Deck player2Deck = do
@@ -149,13 +172,13 @@ newGame player1Deck player2Deck = do
         { hand  = player1Hand
         , deck  = player1Deck
         , board = newBoard 5
-        , hp    = 30
+        , playerHp    = 30
         }
       , PlayerState
         { hand  = player2Hand
         , deck  = player2Deck
         , board = newBoard 5
-        , hp    = 30
+        , playerHp    = 30
         }
       )
     , currentTurn   = Player1

@@ -2,6 +2,7 @@ module Board
   ( Board
   , newBoard
   , (!?)
+  , play
   )
 where
 

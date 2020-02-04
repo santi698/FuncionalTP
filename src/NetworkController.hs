@@ -6,7 +6,6 @@ module NetworkController
   , receive
   , waitForPlayers
   , NetworkController
-  , Player(Player1, Player2)
   )
 where
 
@@ -27,6 +26,8 @@ import           System.IO          (BufferMode (NoBuffering),
                                      IOMode (ReadWriteMode), hClose, hGetLine,
                                      hPutStrLn, hSetBuffering, stdout)
 
+import           UI                 (GameController (..), Msg, Player (..))
+
 main = do
   hSetBuffering stdout NoBuffering
   controller <- start 4242
@@ -35,12 +36,6 @@ main = do
     print msg
     printNetworkControllerState $ state controller
     loop
-
-data Player = Player1
-    | Player2
-    deriving (Show)
-
-type Msg = (Player, String)
 
 data NetworkController = NetworkController
     { player1  :: Chan String
@@ -94,25 +89,25 @@ newNetworkController = do
   state       <- newNetworkControllerState
   return $ NetworkController player1Chan player2Chan receiveChan state
 
-send :: NetworkController -> Player -> String -> IO ()
-send (NetworkController p1 _  _ _) Player1 msg = writeChan p1 msg
-send (NetworkController _  p2 _ _) Player2 msg = writeChan p2 msg
+instance GameController NetworkController where
+  send (NetworkController p1 _  _ _) Player1 msg = writeChan p1 msg
+  send (NetworkController _  p2 _ _) Player2 msg = writeChan p2 msg
+
+  receive (NetworkController _ _ rx _) = readChan rx
+
+  broadcast (NetworkController p1 p2 _ _) msg = do
+    writeChan p1 msg
+    writeChan p2 msg
 
 handleSent :: NetworkController -> Player -> IO String
 handleSent (NetworkController p1 _  _ _) Player1 = readChan p1
 handleSent (NetworkController _  p2 _ _) Player2 = readChan p2
 
-receive :: NetworkController -> IO Msg
-receive (NetworkController _ _ rx _) = readChan rx
 
 handleReceived :: NetworkController -> Player -> String -> IO ()
 handleReceived (NetworkController _ _ rx _) player msg =
   writeChan rx (player, msg)
 
-broadcast :: NetworkController -> String -> IO ()
-broadcast (NetworkController p1 p2 _ _) msg = do
-  writeChan p1 msg
-  writeChan p2 msg
 
 setReady :: NetworkController -> Player -> Bool -> IO ()
 setReady controller player value = do
