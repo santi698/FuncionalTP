@@ -20,22 +20,25 @@ x -: f = f x
 
 start :: (GameController a) => a -> IO ()
 start controller = do
-  gameState <- newGame ExampleDecks.exampleDeck1 ExampleDecks.exampleDeck1
+  gameState <- newGame ExampleDecks.exampleDeck2 ExampleDecks.exampleDeck2
   gameLoop gameState controller
 
 gameLoop :: (GameController a) => GameState -> a -> IO ()
 gameLoop state controller = do
   broadcast controller $ render state
-  action <- getAction controller turn (playerState state turn)
+  action <- getAction controller currentPlayer (playerState state currentPlayer)
   case action of
     Nothing -> do
-      send
-        controller
-        Player1
-        "Invalid action"
+      send controller currentPlayer "Invalid action"
       gameLoop state controller
-    Just action -> gameLoop (state -: runAction action) controller
-  where turn = currentTurn state
+    Just action ->
+      case newState of
+        Left e -> do
+          send controller currentPlayer e
+          gameLoop state controller
+        Right s -> gameLoop s controller
+      where newState = state -: runAction action
+  where currentPlayer = currentTurn state
 
 getAction :: (GameController a) => a -> Player -> PlayerState -> IO (Maybe PlayerAction)
 getAction controller Player1 playerState = do

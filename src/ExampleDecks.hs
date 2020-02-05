@@ -26,6 +26,8 @@ exampleDeck2 = Deck
   , fireball
   , lazyCastle
   , lazyCastle
+  , bigWall
+  , bigWall
   , commonBat
   , explosiveGoblin
   , explosiveGoblin

@@ -1,8 +1,11 @@
 module Board
   ( Board
   , newBoard
-  , (!?)
-  , play
+  , get
+  , add
+  , updateAt
+  , setAt
+  , fmap
   )
 where
 
@@ -23,8 +26,8 @@ instance Show a => Show (Board a) where
 newBoard :: Int -> Board a
 newBoard size = Board (listArray (1, size) [ Nothing | x <- [1 .. size] ])
 
-(!?) :: (Board a) -> Int -> Maybe a
-(Board array) !? i = array ! i
+get :: (Board a) -> Int -> Maybe a
+get (Board array) i = array ! i
 
 emptyCells :: (Board a) -> Int
 emptyCells (Board array) =
@@ -36,10 +39,16 @@ update (Board array) updates = Board (array // updates)
 updateAt :: Int -> Board a -> (Maybe a -> Maybe a) -> Board a
 updateAt i (Board array) f = Board $ array // [(i, f $ array ! i)]
 
-play :: a -> Board a -> Board a
-play card board = case findFirstEmpty board of
+setAt :: Int -> Board a -> Maybe a -> Board a
+setAt i (Board array) v = Board $ array // [(i, v)]
+
+add :: a -> Board a -> Board a
+add card board = case findFirstEmpty board of
   Just i  -> board `update` [(i, Just card)]
   Nothing -> board
+
+instance Functor Board where
+  fmap f (Board array) = Board (fmap (fmap f) array)
 
 findFirstEmpty :: Board a -> Maybe Int
 findFirstEmpty (Board array) = case firstEmptyAssoc of
