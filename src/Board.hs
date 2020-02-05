@@ -10,6 +10,7 @@ module Board
 where
 
 import           Data.Array.IArray (Array, assocs, elems, listArray, (!), (//))
+import           Data.Either
 import           Data.List         (find)
 import           Data.Maybe        (Maybe, isNothing)
 
@@ -42,10 +43,10 @@ updateAt i (Board array) f = Board $ array // [(i, f $ array ! i)]
 setAt :: Int -> Board a -> Maybe a -> Board a
 setAt i (Board array) v = Board $ array // [(i, v)]
 
-add :: a -> Board a -> Board a
+add :: a -> Board a -> Either String (Board a)
 add card board = case findFirstEmpty board of
-  Just i  -> board `update` [(i, Just card)]
-  Nothing -> board
+  Just i  -> Right $ board `update` [(i, Just card)]
+  Nothing -> Left "Board is full"
 
 instance Functor Board where
   fmap f (Board array) = Board (fmap (fmap f) array)

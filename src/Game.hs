@@ -12,13 +12,15 @@ module Game
   , render
   , AttackSource(..)
   , AttackTarget(..)
+  , Card (MonsterCard, SpellCard)
+  , Monster (..)
+  , Spell (..)
+  , raiseAttack
   )
 where
 
 import           Board                   (Board, add, fmap, get, newBoard,
                                           setAt)
-import           Card                    (Card (Magic, Monster), MagicCard (..),
-                                          MonsterCard (..), fight)
 import           Control.Monad           (when)
 import           Data.Array.IArray
 import           Data.Either
@@ -33,7 +35,7 @@ data GameState = GameState
     , player2State :: PlayerState
     , currentTurn  :: Turn
     }
-    deriving (Show, Eq)
+    deriving (Show)
 
 data EndCondition = Winner Player
     | Tie
@@ -43,11 +45,11 @@ data EndCondition = Winner Player
 
 data PlayerState = PlayerState
     { hand     :: Hand
-    , deck     :: Deck
-    , board    :: Board MonsterCard
+    , deck     :: Deck Card
+    , board    :: Board Monster
     , playerHp :: Int
     }
-    deriving (Show, Eq)
+    deriving (Show)
 
 class (Render a) where
   render :: a -> String
@@ -88,7 +90,7 @@ nextPlayer Player2 = Player1
 type Hand = [Card]
 playCard :: Hand -> Int -> (Card, Hand)
 playCard xs i = let (start, end) = splitAt i xs in (head end, start ++ drop 1 end)
-type MonsterSlot = Maybe MonsterCard
+type MonsterSlot = Maybe Monster
 type MonsterSlots = [MonsterSlot]
 type MonsterSlotIndex = Int
 data AttackSource = SourceMonster MonsterSlotIndex
@@ -103,10 +105,10 @@ doAttack (SourceMonster idx) EnemyHero gameState
     Player1 -> do
       m <- maybeToRight "Source monster not found" $ get (board p1s) idx
       when (not $ canAttack m) $ Left "The monster was just played or has already attacked"
-      return $ gameState { player2State = (reduceHp p2s (attack m)) }
+      return $ gameState { player2State = (reducePlayerStateHp p2s (attack m)) }
     Player2 -> do
       m <- maybeToRight "Source monster not found" $ get (board p2s) idx
-      return $ gameState { player1State = (reduceHp p1s (attack m)) }
+      return $ gameState { player1State = (reducePlayerStateHp p1s (attack m)) }
   where p1s = player1State gameState
         p2s = player2State gameState
 
@@ -133,16 +135,16 @@ doAttack (SourceMonster i) (TargetMonster j) gameState
           p1s = player1State gameState
           p2s = player2State gameState
 
-reduceHp :: PlayerState -> Int -> PlayerState
-reduceHp playerState amount =
+reducePlayerStateHp :: PlayerState -> Int -> PlayerState
+reducePlayerStateHp playerState amount =
   playerState { playerHp = (playerHp playerState) - amount }
 
 reducePlayerHp :: Player -> GameState -> Int -> GameState
 reducePlayerHp Player1 gameState amount =
-  gameState { player1State = reduceHp (player1State gameState) amount }
+  gameState { player1State = reducePlayerStateHp (player1State gameState) amount }
 
 reducePlayerHp Player2 gameState amount =
-  gameState { player2State = reduceHp (player1State gameState) amount }
+  gameState { player2State = reducePlayerStateHp (player1State gameState) amount }
 
 endTurn gameState = Right $ gameState { currentTurn = nextPlayer $ currentTurn gameState
                                       , player1State = updateCanAttack $ player1State gameState
@@ -175,24 +177,28 @@ drawCard (GameState player1State player2State Player2) =
 playCardFromHand i (GameState player1State player2State Player1) =
   let (card, newHand) = playCard (hand player1State) i
   in case card of
-    (Monster monster) -> Right $
-                         GameState player1State { hand = newHand
-                                                , board = add monster $ board player1State
-                                                }
-                                   player2State
-                                   Player1
-    otherwise -> Left "Only monsters can be played"
+    (MonsterCard monster) -> do
+      newBoard <- add monster $ board player1State
+      return $ GameState player1State { hand = newHand
+                                      , board = newBoard
+                                      }
+                         player2State
+                         Player1
+    (SpellCard spell) ->
+      Right $ (effect spell) (GameState player1State { hand = newHand } player2State Player1)
 
 playCardFromHand i (GameState player1State player2State Player2) =
   let (card, newHand) = playCard (hand player2State) i
   in case card of
-    (Monster monster) -> Right $
-                         GameState player1State
-                                   player2State { hand = newHand
-                                                , board = add monster $ board player2State
-                                                }
-                                   Player2
-    otherwise -> Left "Only monsters can be played"
+    (MonsterCard monster) -> do
+      newBoard <- add monster $ board player2State
+      return $ GameState player1State
+                         player2State { hand = newHand
+                                     , board = newBoard
+                                     }
+                         Player2
+    (SpellCard spell) ->
+      Right $ (effect spell) (GameState player1State player2State { hand = newHand } Player2)
 
 data PlayerAction = Attack AttackSource AttackTarget
     | PlayCardFromHand Int
@@ -208,7 +214,7 @@ runAction (EndTurn       ) gameState     = do
 runAction (DrawCard) gameState           = drawCard gameState
 runAction (PlayCardFromHand i) gameState = playCardFromHand i gameState
 
-newGame :: Deck -> Deck -> IO GameState
+newGame :: Deck Card -> Deck Card -> IO GameState
 newGame player1Deck player2Deck = do
   player1DeckS <- shuffle player1Deck
   let (player1Hand, player1Deck) = drawN player1DeckS 5
@@ -225,3 +231,51 @@ newGame player1Deck player2Deck = do
                                  , playerHp    = 30
                                  }
                      Player1
+
+-- Card
+
+data Card = MonsterCard Monster
+    | SpellCard Spell
+
+instance Show Card where
+    show (MonsterCard m) = show m
+    show (SpellCard m)   = show m
+
+data Monster = Monster
+    { name      :: String
+    , attack    :: Int
+    , hp        :: Int
+    , canAttack :: Bool
+    }
+
+kills m1 m2 = (attack m1) >= (hp m2)
+
+fight m1 m2
+  | kills m1 m2 && kills m2 m1 = (Nothing, Nothing)
+  | kills m1 m2 = (Just $ alreadyAttacked (reduceHp m1 (attack m2)), Nothing)
+  | kills m2 m1 = (Nothing, Just $ reduceHp m2 (attack m1))
+  | otherwise = (Just $ alreadyAttacked (reduceHp m1 (attack m2)), Just $ reduceHp m2 (attack m1))
+
+reduceHp m x = m { hp = (hp m) - x}
+raiseAttack x m = m { attack = (attack m) + x}
+alreadyAttacked m = m { canAttack = False }
+
+instance Show Monster where
+    show (Monster name attack hp canAttack) =
+        "Monster("
+        ++ name
+        ++ " "
+        ++ (show attack)
+        ++ "/"
+        ++ (show hp)
+        ++ (if canAttack then "" else " Z")
+        ++ ")"
+
+data Spell = Spell
+    { name        :: String
+    , description :: String
+    , effect      :: GameState -> GameState
+    }
+
+instance Show Spell where
+    show (Spell name description _) = "Magic(\"" ++ name ++ "\" " ++ description  ++ ")"
