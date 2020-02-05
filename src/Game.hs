@@ -201,9 +201,8 @@ playCardFromHand i (GameState player1State player2State Player2) =
       Right $ (effect spell) (GameState player1State player2State { hand = newHand } Player2)
 
 data PlayerAction = Attack AttackSource AttackTarget
-    | PlayCardFromHand Int
+    | PlayCard Int
     | EndTurn
-    | DrawCard
     deriving (Show, Eq, Read)
 
 runAction :: PlayerAction -> GameState -> Either String GameState
@@ -211,8 +210,7 @@ runAction (Attack src tgt) gameState     = doAttack src tgt gameState
 runAction (EndTurn       ) gameState     = do
   newState <- endTurn gameState
   drawCard newState
-runAction (DrawCard) gameState           = drawCard gameState
-runAction (PlayCardFromHand i) gameState = playCardFromHand i gameState
+runAction (PlayCard i) gameState = playCardFromHand i gameState
 
 newGame :: Deck Card -> Deck Card -> IO GameState
 newGame player1Deck player2Deck = do

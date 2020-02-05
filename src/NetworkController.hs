@@ -1,6 +1,5 @@
 module NetworkController
-  ( main
-  , start
+  ( start
   , broadcast
   , send
   , receive
@@ -27,15 +26,6 @@ import           System.IO          (BufferMode (NoBuffering),
                                      hPutStrLn, hSetBuffering, stdout)
 
 import           UI                 (GameController (..), Msg, Player (..))
-
-main = do
-  hSetBuffering stdout NoBuffering
-  controller <- start 4242
-  fix $ \loop -> do
-    msg <- receive controller
-    print msg
-    printNetworkControllerState $ state controller
-    loop
 
 data NetworkController = NetworkController
     { player1  :: Chan String

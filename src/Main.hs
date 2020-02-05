@@ -1,8 +1,8 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 
 import qualified NetworkController as NetworkController
-import           System.IO         (BufferMode (NoBuffering), getLine,
-                                    hSetBuffering, print, stdout)
+import           System.IO         (BufferMode (..), getLine, hSetBuffering,
+                                    print, stdout)
 import qualified UI
 
 main :: IO ()

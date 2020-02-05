@@ -50,7 +50,7 @@ getAction controller Player1 playerState = do
   send
     controller
     Player1
-    "What do you want to do?"
+    "What do you want to do?\nPossible actions: EndTurn, Attack from to, PlayCard index"
   input <- fmap snd $ receive controller
   return $ userInputToAction $ words input
 
@@ -68,8 +68,7 @@ getAction controller Player2 playerState = do
   return $ userInputToAction $ words input
 
 userInputToAction :: [String] -> Maybe PlayerAction
-userInputToAction ["DrawCard"]            = Just DrawCard
-userInputToAction ["PlayCardFromHand", i] = Just (PlayCardFromHand (read i))
+userInputToAction ["PlayCard", i] = Just (PlayCard ((read i) - 1))
 userInputToAction ["Attack", src, "EnemyHero"] =
     Just (Attack (SourceMonster $ read src) (EnemyHero))
 userInputToAction ["Attack", src, tgt] =
