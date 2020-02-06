@@ -44,22 +44,35 @@ data EndCondition = Winner Player
 -- checkEndCondition (GameState player1State player2State _) =
 
 data PlayerState = PlayerState
-    { hand     :: Hand
-    , deck     :: Deck Card
-    , board    :: Board Monster
-    , playerHp :: Int
+    { hand        :: Hand
+    , deck        :: Deck Card
+    , board       :: Board Monster
+    , playerHp    :: Int
+    , currentMana :: Int
+    , maxMana     :: Int
     }
     deriving (Show)
+
+newPlayerState deck = do
+  deckS <- shuffle deck
+  let (hand, deckAfterDraw) = drawN deckS 5
+  return PlayerState { hand        = hand
+                     , deck        = deckAfterDraw
+                     , board       = newBoard 5
+                     , playerHp    = 30
+                     , currentMana = 1
+                     , maxMana     = 1
+                     }
 
 class (Render a) where
   render :: a -> String
 
 instance Render GameState where
   render (GameState player1State player2State currentTurn) =
-    "Player 1 HP: "
-      ++ (show $ playerHp player1State)
-      ++ "\nPlayer 2 HP: "
-      ++ (show $ playerHp player2State)
+    "Player 1 "
+      ++ (render player1State)
+      ++ "\nPlayer 2 "
+      ++ (render player2State)
       ++ "\n"
       ++ (render $ board player1State)
       ++ "\n"
@@ -74,6 +87,15 @@ instance (Show a) => (Render [a]) where
 
 instance (Show a) => (Render (Board a)) where
   render board = show board
+
+instance Render PlayerState where
+  render playerState =
+    "HP: "
+      ++ (show $ playerHp playerState)
+      ++ " Mana: "
+      ++ (show $ currentMana playerState)
+      ++ "/"
+      ++ (show $ maxMana playerState)
 
 playerState :: GameState -> Player -> PlayerState
 playerState state Player1 = player1State state
@@ -90,8 +112,6 @@ nextPlayer Player2 = Player1
 type Hand = [Card]
 playCard :: Hand -> Int -> (Card, Hand)
 playCard xs i = let (start, end) = splitAt i xs in (head end, start ++ drop 1 end)
-type MonsterSlot = Maybe Monster
-type MonsterSlots = [MonsterSlot]
 type MonsterSlotIndex = Int
 data AttackSource = SourceMonster MonsterSlotIndex
     deriving (Show, Eq, Read)
@@ -100,15 +120,21 @@ data AttackTarget = TargetMonster MonsterSlotIndex
     deriving (Show, Eq, Read)
 
 doAttack :: AttackSource -> AttackTarget -> GameState -> Either String GameState
-doAttack (SourceMonster idx) EnemyHero gameState
+doAttack (SourceMonster i) EnemyHero gameState
   = case currentTurn gameState of
     Player1 -> do
-      m <- maybeToRight "Source monster not found" $ get (board p1s) idx
+      let b = board p1s
+      m <- maybeToRight "Source monster not found" $ get b i
       when (not $ canAttack m) $ Left "The monster was just played or has already attacked"
-      return $ gameState { player2State = (reducePlayerStateHp p2s (attack m)) }
+      return $ gameState { player1State = p1s { board = setAt i b (Just $ alreadyAttacked m) }
+                         , player2State = (reducePlayerStateHp p2s (attack m))
+                         }
     Player2 -> do
-      m <- maybeToRight "Source monster not found" $ get (board p2s) idx
-      return $ gameState { player1State = (reducePlayerStateHp p1s (attack m)) }
+      let b = board p2s
+      m <- maybeToRight "Source monster not found" $ get b i
+      return $ gameState { player1State = (reducePlayerStateHp p1s (attack m))
+                         , player2State = p2s { board = setAt i b (Just $ alreadyAttacked m)}
+                         }
   where p1s = player1State gameState
         p2s = player2State gameState
 
@@ -144,16 +170,27 @@ reducePlayerHp Player1 gameState amount =
   gameState { player1State = reducePlayerStateHp (player1State gameState) amount }
 
 reducePlayerHp Player2 gameState amount =
-  gameState { player2State = reducePlayerStateHp (player1State gameState) amount }
+  gameState { player2State = reducePlayerStateHp (player2State gameState) amount }
 
-endTurn gameState = Right $ gameState { currentTurn = nextPlayer $ currentTurn gameState
-                                      , player1State = updateCanAttack $ player1State gameState
-                                      , player2State = updateCanAttack $ player2State gameState
-                                      }
+endTurn gameState = case currentTurn gameState of
+  Player1 ->
+    Right $ gameState { currentTurn = nextPlayer $ currentTurn gameState
+                      , player1State = raiseAndRecoverMana $ updateCanAttack $ player1State gameState
+                      , player2State = updateCanAttack $ player2State gameState
+                      }
+  Player2 ->
+    Right $ gameState { currentTurn = nextPlayer $ currentTurn gameState
+                      , player1State = updateCanAttack $ player1State gameState
+                      , player2State = raiseAndRecoverMana $ updateCanAttack $ player2State gameState
+                      }
 
 updateCanAttack :: PlayerState -> PlayerState
 updateCanAttack playerState =
   playerState { board = fmap (\v -> v { canAttack = True }) $ board playerState }
+
+raiseAndRecoverMana :: PlayerState -> PlayerState
+raiseAndRecoverMana playerState = playerState { maxMana = newMaxMana, currentMana = newMaxMana }
+                                  where newMaxMana = (maxMana playerState) + 1
 
 drawCard (GameState player1State player2State Player1) =
   Right $ GameState player1State { deck = newDeck
@@ -171,34 +208,44 @@ drawCard (GameState player1State player2State Player2) =
                          , hand = newHand
                          }
             Player2
-  where (drawnCard, newDeck) = draw $ deck player1State
-        newHand = drawnCard:(hand player1State)
+  where (drawnCard, newDeck) = draw $ deck player2State
+        newHand = drawnCard:(hand player2State)
 
 playCardFromHand i (GameState player1State player2State Player1) =
   let (card, newHand) = playCard (hand player1State) i
   in case card of
     (MonsterCard monster) -> do
+      when ((costM monster) > (currentMana player1State)) $ Left $ "Not enough mana"
+      let newMana = (currentMana player1State) - (costM monster)
       newBoard <- add monster $ board player1State
       return $ GameState player1State { hand = newHand
                                       , board = newBoard
+                                      , currentMana = newMana
                                       }
                          player2State
                          Player1
-    (SpellCard spell) ->
-      Right $ (effect spell) (GameState player1State { hand = newHand } player2State Player1)
+    (SpellCard spell) -> do
+      when ((cost spell) > (currentMana player1State)) $ Left $ "Not enough mana"
+      let newMana = (currentMana player1State) - (cost spell)
+      return $ (effect spell) (GameState player1State { hand = newHand, currentMana = newMana } player2State Player1)
 
 playCardFromHand i (GameState player1State player2State Player2) =
   let (card, newHand) = playCard (hand player2State) i
   in case card of
     (MonsterCard monster) -> do
+      when ((costM monster) > (currentMana player2State)) $ Left $ "Not enough mana"
+      let newMana = (currentMana player2State) - (costM monster)
       newBoard <- add monster $ board player2State
       return $ GameState player1State
                          player2State { hand = newHand
-                                     , board = newBoard
-                                     }
+                                      , board = newBoard
+                                      , currentMana = newMana
+                                      }
                          Player2
-    (SpellCard spell) ->
-      Right $ (effect spell) (GameState player1State player2State { hand = newHand } Player2)
+    (SpellCard spell) -> do
+      when ((cost spell) > (currentMana player2State)) $ Left $ "Not enough mana"
+      let newMana = (currentMana player2State) - (cost spell)
+      return $ (effect spell) (GameState player1State player2State { hand = newHand, currentMana = newMana } Player2)
 
 data PlayerAction = Attack AttackSource AttackTarget
     | PlayCard Int
@@ -214,21 +261,9 @@ runAction (PlayCard i) gameState = playCardFromHand i gameState
 
 newGame :: Deck Card -> Deck Card -> IO GameState
 newGame player1Deck player2Deck = do
-  player1DeckS <- shuffle player1Deck
-  let (player1Hand, player1Deck) = drawN player1DeckS 5
-  player2DeckS <- shuffle player2Deck
-  let (player2Hand, player2Deck) = drawN player2DeckS 5
-  return $ GameState PlayerState { hand  = player1Hand
-                                 , deck  = player1Deck
-                                 , board = newBoard 5
-                                 , playerHp    = 30
-                                 }
-                     PlayerState { hand  = player2Hand
-                                 , deck  = player2Deck
-                                 , board = newBoard 5
-                                 , playerHp    = 30
-                                 }
-                     Player1
+  player1State <- newPlayerState player1Deck
+  player2State <- newPlayerState player2Deck
+  return $ GameState player1State player2State Player1
 
 -- Card
 
@@ -243,6 +278,7 @@ data Monster = Monster
     { name      :: String
     , attack    :: Int
     , hp        :: Int
+    , costM     :: Int
     , canAttack :: Bool
     }
 
@@ -259,21 +295,26 @@ raiseAttack x m = m { attack = (attack m) + x}
 alreadyAttacked m = m { canAttack = False }
 
 instance Show Monster where
-    show (Monster name attack hp canAttack) =
+    show (Monster name attack hp cost canAttack) =
         "Monster("
         ++ name
         ++ " "
         ++ (show attack)
         ++ "/"
         ++ (show hp)
+        ++ " ["
+        ++ (show cost)
+        ++ "]"
         ++ (if canAttack then "" else " Z")
         ++ ")"
 
 data Spell = Spell
     { name        :: String
     , description :: String
+    , cost        :: Int
     , effect      :: GameState -> GameState
     }
 
 instance Show Spell where
-    show (Spell name description _) = "Magic(\"" ++ name ++ "\" " ++ description  ++ ")"
+    show (Spell name description cost _) =
+      "Magic(\"" ++ name ++ "\" " ++ description  ++ " [" ++ (show cost) ++ "])"

@@ -20,7 +20,7 @@ x -: f = f x
 
 start :: (GameController a) => a -> IO ()
 start controller = do
-  gameState <- newGame ExampleDecks.exampleDeck2 ExampleDecks.exampleDeck2
+  gameState <- newGame ExampleDecks.exampleDeck1 ExampleDecks.exampleDeck2
   gameLoop gameState controller
 
 gameLoop :: (GameController a) => GameState -> a -> IO ()

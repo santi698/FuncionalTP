@@ -29,6 +29,8 @@ exampleDeck2 = Deck
   , bigWall
   , bigWall
   , commonBat
+  , commonBat
+  , commonBat
   , explosiveGoblin
   , explosiveGoblin
   , boostMorale

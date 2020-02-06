@@ -90,7 +90,6 @@ buen candidato para empezar a testear el modelo del juego sobre todo.
 #### Juego
 
 - Aplicación cliente con interfaz de usuario más amigable.
-- Implementación de "maná/energía" en el juego para que las acciones tengan un costo.
 - El código de las acciones contiene mucha repetición, buscar una forma de no tener ramas tan
 grandes dependiendo de quien es el turno
 
