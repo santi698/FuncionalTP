@@ -1,6 +1,7 @@
 module Board
   ( Board
   , newBoard
+  , fromList
   , get
   , add
   , updateAt
@@ -25,7 +26,10 @@ instance Show a => Show (Board a) where
   show (Board array) = "Board\n  " ++ (show $ map showBoardElem $ elems array)
 
 newBoard :: Int -> Board a
-newBoard size = Board (listArray (1, size) [ Nothing | x <- [1 .. size] ])
+newBoard size = fromList [ Nothing | x <- [1 .. size] ]
+
+fromList :: [Maybe a] -> Board a
+fromList list = Board (listArray (1, length list) list)
 
 get :: (Board a) -> Int -> Maybe a
 get (Board array) i = array ! i
@@ -52,7 +56,5 @@ instance Functor Board where
   fmap f (Board array) = Board (fmap (fmap f) array)
 
 findFirstEmpty :: Board a -> Maybe Int
-findFirstEmpty (Board array) = case firstEmptyAssoc of
-  Nothing     -> Nothing
-  Just (i, v) -> Just i
+findFirstEmpty (Board array) = fmap fst firstEmptyAssoc
   where firstEmptyAssoc = find (isNothing . snd) (assocs array)
